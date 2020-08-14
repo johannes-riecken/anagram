@@ -1,0 +1,51 @@
+Design Decisions
+================
+
+Maintainability
+---------------
+
+* Object-Oriented Design: I've created a struct for the anagrams, so that
+  behavior and state are organized cohesively. This allows implementing standard
+  interfaces like Stringer.
+* Method length: I've kept methods short and simple and added comments to ease
+  cognitive load.
+* Maintainability over performance: To decouple the code and make it more
+  concise, I've sometimes increased memory complexity, for example I read the
+  entire file's lines into an array instead of iterating over the file in order
+  to keep the NewAnagrams method free of IO, which increases its testability.
+* Hash order: Because of Go's map key order randomization, the program's output
+  order will not always match the output example given in the exercise. If
+  the order should match the word input, then I would use a library with
+  a sorted map, which I haven't done for simplicity.
+
+
+Scalability
+-----------
+
+This document details how I plan to implement scaling to lists of 100 billion
+words. This part is not implemented yet.
+* Concurrency: 100 billion words can (depending on the string type) take roughly
+  a terabyte of memory, which is too much for a single server. If processing one
+  word takes a millisecond, then processing 100 billion words would take
+  roughly three years. For these reasons, it's necessary to run multiple
+  instances of the program on multiple partitions of the dataset in a cluster.
+  Specialized software exists for doing that, e.g. Apache Hadoop.
+* Pipelines: A simple approach for running computations in parallel and merging
+  their results is detailed in the [Pipelines article of the Go
+  blog](https://blog.golang.org/pipelines), which is the approach I'm planning
+  to implement these days. 
+
+
+Performance
+-----------
+
+* Sorting: I've decided to rely on sorting each word to derive a key, which
+  takes n*log(n) operations. An alternative would be to use an array where each
+  array position counts the number of times the letter with the number
+  corresponding to the array position appears in the word, which would allow to
+  skip the sorting step. Because of the excessive memory requirements of that
+  approach I've decided against it here.
+* Keeping non-anagram words: In order to facilitate later parallelization, I've
+  decided to keep words, which don't have an anagram, in the Anagrams instance's
+  state. During a merge step with another partition of the dataset, these single
+  words might turn out to have anagrams after all.
