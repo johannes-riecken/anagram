@@ -1,6 +1,7 @@
 package main
 
 import (
+	"sync"
 	"flag"
 	"bufio"
 	"reflect"
@@ -26,6 +27,10 @@ type OrderedMap struct {
 	Map map[string][]string
 	Keys []string
 	i int
+}
+
+func (o *OrderedMap) Key() string {
+	return o.Keys[o.i]
 }
 
 func (o *OrderedMap) Value() []string {
@@ -63,35 +68,58 @@ func (o *OrderedMap) AppendValues(k string, v []string) {
 
 func lines(s bufio.Scanner) <-chan string {
 	ch := make(chan string)
-	for s.Scan() {
-		ch <- s.Text()
-	}
-	close(ch)
+	go func() {
+		for s.Scan() {
+			ch <- s.Text()
+		}
+		close(ch)
+	}()
 	return ch
 }
 
-// func anagrams(a []string, co chan OrderedMap) {
-// 	m := OrderedMap{}
-// 	for _, w := range a {
-// 		b := []byte(w)
-// 		sort.Slice(b, func(i, j int) bool {return b[i] < b[j];})
-// 		m.AppendValues(string(b), []string{w})
-// 	}
-// 	return ch
-// }
+func anagrams(a []string) chan OrderedMap {
+	ch := make(chan OrderedMap)
+	go func() {
+		o := OrderedMap{}
+		for _, w := range a {
+			b := []byte(w)
+			sort.Slice(b, func(i, j int) bool {return b[i] < b[j];})
+			o.AppendValues(string(b), []string{w})
+		}
+		ch <- o
+		close(ch)
+	}()
+	return ch
+}
 
-// func merge(chans []chan OrderedMap) chan OrderedMap {
-// 	co := make(chan OrderedMap)
-// 	for ch := range chans {
-// 	}
-// 	return co
-// }
+func merge(chans []chan OrderedMap) OrderedMap {
+	o := OrderedMap{}
+	out := make(chan OrderedMap)
+	wg := sync.WaitGroup{}
+	wg.Add(len(chans))
+	for _, ch := range chans {
+		go func(c chan OrderedMap) {
+			out <- <-c
+			wg.Done()
+		}(ch)
+	}
+	go func() {
+		wg.Wait()
+		close(out)
+	}()
+	for oo := range out {
+		for it := oo.Front(); it != nil; it.Next() {
+			o.AppendValues(it.Key(), it.Value())
+		}
+	}
+	return o
+}
 
 
 func main() {
 	_ = flag.Int
 	_ = ioutil.ReadFile
-	jobs := flag.Int("j", 1, "Number of jobs to run simultaneously")
+	// jobs := flag.Int("j", 1, "Number of jobs to run simultaneously")
 	if len(os.Args) == 1 {
 		log.Fatal("Invocation: anagrams.go [words_file]")
 	}
