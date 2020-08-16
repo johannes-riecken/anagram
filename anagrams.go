@@ -29,6 +29,12 @@ type OrderedMap struct {
 	i int
 }
 
+func NewOrderedMap() OrderedMap {
+	o := OrderedMap{}
+	o.Map = make(map[string][]string)
+	return o
+}
+
 func (o *OrderedMap) Key() string {
 	return o.Keys[o.i]
 }
@@ -85,7 +91,7 @@ func lines(f string) <-chan string {
 func anagrams(a <-chan string) <-chan OrderedMap {
 	ch := make(chan OrderedMap)
 	go func() {
-		o := OrderedMap{}
+		o := NewOrderedMap()
 		for w := range a {
 			b := []byte(w)
 			sort.Slice(b, func(i, j int) bool {return b[i] < b[j];})
@@ -98,7 +104,7 @@ func anagrams(a <-chan string) <-chan OrderedMap {
 }
 
 func merge(chans []<-chan OrderedMap) OrderedMap {
-	o := OrderedMap{}
+	o := NewOrderedMap()
 	out := make(chan OrderedMap)
 	wg := sync.WaitGroup{}
 	wg.Add(len(chans))
@@ -113,7 +119,7 @@ func merge(chans []<-chan OrderedMap) OrderedMap {
 		close(out)
 	}()
 	for oo := range out {
-		for it := oo.Front(); it != nil; it.Next() {
+		for it := oo.Front(); it != nil; it = it.Next() {
 			o.AppendValues(it.Key(), it.Value())
 		}
 	}
@@ -136,8 +142,11 @@ func main() {
 		chans[i] = anagrams(lines(a))
 	}
 	o := merge(chans)
-	for it := o.Front(); it != nil; it.Next() {
-		fmt.Println(strings.Join(it.Value(), " "))
+	for it := o.Front(); it != nil; it = it.Next() {
+		v := it.Value()
+		if len(v) > 1 {
+			fmt.Println(strings.Join(v, " "))
+		}
 	}
 	// each file partition has a job to put lines in its own channel
 	// each above job is connected to an anagram loop job
