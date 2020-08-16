@@ -66,9 +66,14 @@ func (o *OrderedMap) AppendValues(k string, v []string) {
 	}
 }
 
-func lines(s bufio.Scanner) <-chan string {
+func lines(f string) <-chan string {
 	ch := make(chan string)
 	go func() {
+		r, err := os.Open(f)
+		if err != nil {
+			log.Fatal("error reading anagrams file:", err)
+		}
+		s := bufio.NewScanner(r)
 		for s.Scan() {
 			ch <- s.Text()
 		}
@@ -77,11 +82,11 @@ func lines(s bufio.Scanner) <-chan string {
 	return ch
 }
 
-func anagrams(a []string) chan OrderedMap {
+func anagrams(a <-chan string) <-chan OrderedMap {
 	ch := make(chan OrderedMap)
 	go func() {
 		o := OrderedMap{}
-		for _, w := range a {
+		for w := range a {
 			b := []byte(w)
 			sort.Slice(b, func(i, j int) bool {return b[i] < b[j];})
 			o.AppendValues(string(b), []string{w})
@@ -92,13 +97,13 @@ func anagrams(a []string) chan OrderedMap {
 	return ch
 }
 
-func merge(chans []chan OrderedMap) OrderedMap {
+func merge(chans []<-chan OrderedMap) OrderedMap {
 	o := OrderedMap{}
 	out := make(chan OrderedMap)
 	wg := sync.WaitGroup{}
 	wg.Add(len(chans))
 	for _, ch := range chans {
-		go func(c chan OrderedMap) {
+		go func(c <-chan OrderedMap) {
 			out <- <-c
 			wg.Done()
 		}(ch)
@@ -119,28 +124,44 @@ func merge(chans []chan OrderedMap) OrderedMap {
 func main() {
 	_ = flag.Int
 	_ = ioutil.ReadFile
-	// jobs := flag.Int("j", 1, "Number of jobs to run simultaneously")
+	_ = os.Open
+	_ = log.Fatal
+	_ = bufio.NewScanner
 	if len(os.Args) == 1 {
 		log.Fatal("Invocation: anagrams.go [words_file]")
 	}
 
-	// b, err := ioutil.ReadFile(os.Args[1])
+	chans := make([]<-chan OrderedMap, len(os.Args[1:]))
+	for i, a := range os.Args[1:] {
+		chans[i] = anagrams(lines(a))
+	}
+	o := merge(chans)
+	for it := o.Front(); it != nil; it.Next() {
+		fmt.Println(strings.Join(it.Value(), " "))
+	}
+	// each file partition has a job to put lines in its own channel
+	// each above job is connected to an anagram loop job
+	// a merge job takes all anagram channels and does a while select until all
+	// are closed
+	// then the merge job returns all info to main, which calls a print function
+
+	// // b, err := ioutil.ReadFile(os.Args[1])
+	// // if err != nil {
+	// // 	log.Fatal("error reading anagrams file:", err)
+	// // }
+	// r, err := os.Open(os.Args[1])
 	// if err != nil {
 	// 	log.Fatal("error reading anagrams file:", err)
 	// }
-	r, err := os.Open(os.Args[1])
-	if err != nil {
-		log.Fatal("error reading anagrams file:", err)
-	}
-	s := bufio.NewScanner(r)
-	lines := []string{}
-	for s.Scan() {
-		lines = append(lines, s.Text())
-	}
-	// lines := strings.Split(string(b), "\n")
-	// lines = lines[:len(lines)-1] // remove empty string from trailing newline
-	anagrams := NewAnagrams(lines)
-	fmt.Println(anagrams.String())
+	// s := bufio.NewScanner(r)
+	// lines := []string{}
+	// for s.Scan() {
+	// 	lines = append(lines, s.Text())
+	// }
+	// // lines := strings.Split(string(b), "\n")
+	// // lines = lines[:len(lines)-1] // remove empty string from trailing newline
+	// anagrams := NewAnagrams(lines)
+	// fmt.Println(anagrams.String())
 }
 
 // Merges the state of another Anagrams instance into this instance. This
@@ -312,9 +333,4 @@ func TestParallel(t *testing.T) {
 	// a1 := NewAnagrams(w1)
 	// a2 := NewAnagrams(w2)
 	// a3 := NewAnagrams(w3)
-	// each file partition has a job to put lines in its own channel
-	// each above job is connected to an anagram loop job
-	// a merge job takes all anagram channels and does a while select until all
-	// are closed
-	// then the merge job returns all info to main, which calls a print function
 }
