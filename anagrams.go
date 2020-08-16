@@ -1,23 +1,24 @@
 package main
 
 import (
-	"sync"
-	"flag"
 	"bufio"
 	"fmt"
-	"io/ioutil"
 	"log"
 	"os"
 	"sort"
 	"strings"
+	"sync"
 )
 
+////////////////////////////////////////////////////////////////////////////////
+
+// Map that remembers insertion order.
 type AnagramKey string
 type AnagramValue []string
 
 type OrderedMap struct {
 	m map[AnagramKey]AnagramValue
-	Keys []AnagramKey
+	keys []AnagramKey
 	i int
 }
 
@@ -28,11 +29,11 @@ func NewOrderedMap() OrderedMap {
 }
 
 func (o *OrderedMap) Key() AnagramKey {
-	return o.Keys[o.i]
+	return o.keys[o.i]
 }
 
 func (o *OrderedMap) Value() AnagramValue {
-	return o.m[o.Keys[o.i]]
+	return o.m[o.keys[o.i]]
 }
 
 func (o *OrderedMap) Front() *OrderedMap {
@@ -42,28 +43,26 @@ func (o *OrderedMap) Front() *OrderedMap {
 
 func (o *OrderedMap) Next() *OrderedMap {
 	o.i++
-	if o.i < len(o.Keys) {
+	if o.i < len(o.keys) {
 		return o
 	}
 	return nil
 }
 
-func (o *OrderedMap) Insert(k AnagramKey, v AnagramValue) {
-	_, ok := o.m[k]
-	o.m[k] = v
-	if !ok {
-		o.Keys = append(o.Keys, k)
-	}
-}
-
+// Appends only unseen values.
 func (o *OrderedMap) AppendValues(k AnagramKey, v AnagramValue) {
 	_, ok := o.m[k]
 	o.m[k] = append(o.m[k], v...)
 	if !ok {
-		o.Keys = append(o.Keys, k)
+		o.keys = append(o.keys, k)
 	}
 }
 
+////////////////////////////////////////////////////////////////////////////////
+
+// Actual program
+
+// First pipeline stage: read lines.
 func lines(f string) <-chan string {
 	ch := make(chan string)
 	go func() {
@@ -80,13 +79,14 @@ func lines(f string) <-chan string {
 	return ch
 }
 
+// Second pipeline stage: find anagrams.
 func anagrams(a <-chan string) <-chan OrderedMap {
 	ch := make(chan OrderedMap)
 	go func() {
 		o := NewOrderedMap()
 		for w := range a {
 			b := []byte(w)
-			sort.Slice(b, func(i, j int) bool {return b[i] < b[j];})
+			sort.Slice(b, func(i, j int) bool {return b[i] < b[j]})
 			o.AppendValues(AnagramKey(b), AnagramValue{w})
 		}
 		ch <- o
@@ -95,6 +95,7 @@ func anagrams(a <-chan string) <-chan OrderedMap {
 	return ch
 }
 
+// Third pipeline stage: merge results.
 func merge(chans []<-chan OrderedMap) OrderedMap {
 	o := NewOrderedMap()
 	out := make(chan OrderedMap)
@@ -118,22 +119,19 @@ func merge(chans []<-chan OrderedMap) OrderedMap {
 	return o
 }
 
-
 func main() {
-	_ = flag.Int
-	_ = ioutil.ReadFile
-	_ = os.Open
-	_ = log.Fatal
-	_ = bufio.NewScanner
 	if len(os.Args) == 1 {
-		log.Fatal("Invocation: anagrams.go [words_file]")
+		log.Fatal("Invocation: anagrams.go [words_file [words_file...]]")
 	}
 
+	// "lines" workers for all files hand over lines to "anagrams" workers
 	chans := make([]<-chan OrderedMap, len(os.Args[1:]))
 	for i, a := range os.Args[1:] {
 		chans[i] = anagrams(lines(a))
 	}
+	// A "merge" worker merges results from workers in FIFO order
 	o := merge(chans)
+	// The results are printed out
 	for it := o.Front(); it != nil; it = it.Next() {
 		v := it.Value()
 		if len(v) > 1 {
