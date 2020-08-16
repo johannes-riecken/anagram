@@ -1,6 +1,7 @@
 package main
 
 import (
+	"flag"
 	"bufio"
 	"reflect"
 	"fmt"
@@ -21,12 +22,69 @@ type Anagrams struct {
 	InvalidKeys map[AnagramKey]struct{}
 }
 
+type OrderedMap struct {
+	Map map[string][]string
+	Keys []string
+	i int
+}
+
+func (o *OrderedMap) Value() []string {
+	return o.Map[o.Keys[o.i]]
+}
+
+func (o *OrderedMap) Front() *OrderedMap {
+	o.i = 0
+	return o
+}
+
+func (o *OrderedMap) Next() *OrderedMap {
+	o.i++
+	if o.i < len(o.Keys) {
+		return o
+	}
+	return nil
+}
+
+func (o *OrderedMap) Insert(k string, v []string) {
+	o.Map[k] = v
+	o.Keys = append(o.Keys, k)
+}
+
+func lines(s bufio.Scanner) <-chan string {
+	ch := make(chan string)
+	for s.Scan() {
+		ch <- s.Text()
+	}
+	close(ch)
+	return ch
+}
+
+func anagrams(a []string) <-chan OrderedMap {
+	ch := make(chan OrderedMap)
+	m := make(map[string][]string)
+	for _, w := range a {
+		b := []byte(w)
+		sort.Slice(b, func(i, j int) bool {return b[i] < b[j];})
+		m[string(b)] = append(m[string(b)], w)
+	}
+	return ch
+}
+
+// func merge(chans []chan OrderedMap) chan OrderedMap {
+// 	co := make(chan OrderedMap)
+// 	for ch := range chans {
+// 	}
+// 	return co
+// }
+
+
 func main() {
+	_ = flag.Int
+	_ = ioutil.ReadFile
 	if len(os.Args) == 1 {
 		log.Fatal("Invocation: anagrams.go [words_file]")
 	}
 
-	_ = ioutil.ReadFile
 	// b, err := ioutil.ReadFile(os.Args[1])
 	// if err != nil {
 	// 	log.Fatal("error reading anagrams file:", err)
@@ -184,4 +242,40 @@ func TestSpaceSensitive(t *testing.T) {
 	if !reflect.DeepEqual(expected, actual) {
 		t.Errorf("%v != %v", actual, expected)
 	}
+}
+
+func TestPseudoParallel(t *testing.T) {
+	w0 := []string{"act", "cat", "tree", "race"}
+	w1 := []string{"silent"}
+	w2 := []string{"care"}
+	w3 := []string{"acre", "bee"}
+	a0 := NewAnagrams(w0)
+	a1 := NewAnagrams(w1)
+	a2 := NewAnagrams(w2)
+	a3 := NewAnagrams(w3)
+	a0.Merge(a1)
+	a0.Merge(a2)
+	a0.Merge(a3)
+	a0.Filter()
+	actual := a0.SortedValues()
+	expected := [][]string{[]string{"act", "cat"}, []string{"race", "care", "acre"}}
+	if !reflect.DeepEqual(expected, actual) {
+		t.Errorf("%v != %v", actual, expected)
+	}
+}
+
+func TestParallel(t *testing.T) {
+	// w0 := []string{"act", "cat", "tree", "race"}
+	// w1 := []string{"silent"}
+	// w2 := []string{"care"}
+	// w3 := []string{"acre", "bee"}
+	// a0 := NewAnagrams(w0)
+	// a1 := NewAnagrams(w1)
+	// a2 := NewAnagrams(w2)
+	// a3 := NewAnagrams(w3)
+	// the line read is passed to a channel
+	// several partitions of the file are read in parallel to the same channel
+	// the anagrams from each split are passed to the same channel
+	// the anagrams in the channel are combined
+	// the anagrams are output
 }
