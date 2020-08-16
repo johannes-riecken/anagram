@@ -46,8 +46,19 @@ func (o *OrderedMap) Next() *OrderedMap {
 }
 
 func (o *OrderedMap) Insert(k string, v []string) {
+	_, ok := o.Map[k]
 	o.Map[k] = v
-	o.Keys = append(o.Keys, k)
+	if !ok {
+		o.Keys = append(o.Keys, k)
+	}
+}
+
+func (o *OrderedMap) AppendValues(k string, v []string) {
+	_, ok := o.Map[k]
+	o.Map[k] = append(o.Map[k], v...)
+	if !ok {
+		o.Keys = append(o.Keys, k)
+	}
 }
 
 func lines(s bufio.Scanner) <-chan string {
@@ -59,16 +70,15 @@ func lines(s bufio.Scanner) <-chan string {
 	return ch
 }
 
-func anagrams(a []string) <-chan OrderedMap {
-	ch := make(chan OrderedMap)
-	m := make(map[string][]string)
-	for _, w := range a {
-		b := []byte(w)
-		sort.Slice(b, func(i, j int) bool {return b[i] < b[j];})
-		m[string(b)] = append(m[string(b)], w)
-	}
-	return ch
-}
+// func anagrams(a []string, co chan OrderedMap) {
+// 	m := OrderedMap{}
+// 	for _, w := range a {
+// 		b := []byte(w)
+// 		sort.Slice(b, func(i, j int) bool {return b[i] < b[j];})
+// 		m.AppendValues(string(b), []string{w})
+// 	}
+// 	return ch
+// }
 
 // func merge(chans []chan OrderedMap) chan OrderedMap {
 // 	co := make(chan OrderedMap)
@@ -81,6 +91,7 @@ func anagrams(a []string) <-chan OrderedMap {
 func main() {
 	_ = flag.Int
 	_ = ioutil.ReadFile
+	jobs := flag.Int("j", 1, "Number of jobs to run simultaneously")
 	if len(os.Args) == 1 {
 		log.Fatal("Invocation: anagrams.go [words_file]")
 	}
@@ -273,9 +284,9 @@ func TestParallel(t *testing.T) {
 	// a1 := NewAnagrams(w1)
 	// a2 := NewAnagrams(w2)
 	// a3 := NewAnagrams(w3)
-	// the line read is passed to a channel
-	// several partitions of the file are read in parallel to the same channel
-	// the anagrams from each split are passed to the same channel
-	// the anagrams in the channel are combined
-	// the anagrams are output
+	// each file partition has a job to put lines in its own channel
+	// each above job is connected to an anagram loop job
+	// a merge job takes all anagram channels and does a while select until all
+	// are closed
+	// then the merge job returns all info to main, which calls a print function
 }
