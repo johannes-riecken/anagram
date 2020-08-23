@@ -17,9 +17,9 @@ type AnagramKey string
 type AnagramValue []string
 
 type OrderedMap struct {
-	m map[AnagramKey]AnagramValue
+	m    map[AnagramKey]AnagramValue
 	keys []AnagramKey
-	i int
+	i    int
 }
 
 func NewOrderedMap() OrderedMap {
@@ -86,7 +86,7 @@ func anagrams(a <-chan string) <-chan OrderedMap {
 		o := NewOrderedMap()
 		for w := range a {
 			b := []byte(w)
-			sort.Slice(b, func(i, j int) bool {return b[i] < b[j]})
+			sort.Slice(b, func(i, j int) bool { return b[i] < b[j] })
 			o.AppendValues(AnagramKey(b), AnagramValue{w})
 		}
 		ch <- o
